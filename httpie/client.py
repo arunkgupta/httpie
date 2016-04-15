@@ -3,28 +3,74 @@ import sys
 from pprint import pformat
 
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages import urllib3
 
 from httpie import sessions
 from httpie import __version__
 from httpie.compat import str
+from httpie.input import SSL_VERSION_ARG_MAPPING
 from httpie.plugins import plugin_manager
+from httpie.utils import repr_dict_nice
+
+try:
+    # https://urllib3.readthedocs.org/en/latest/security.html
+    urllib3.disable_warnings()
+except AttributeError:
+    # In some rare cases, the user may have an old version of the requests
+    # or urllib3, and there is no method called "disable_warnings." In these
+    # cases, we don't need to call the method.
+    # They may get some noisy output but execution shouldn't die. Move on.
+    pass
 
 
 FORM = 'application/x-www-form-urlencoded; charset=utf-8'
-JSON = 'application/json; charset=utf-8'
+JSON = 'application/json'
 DEFAULT_UA = 'HTTPie/%s' % __version__
+
+
+class HTTPieHTTPAdapter(HTTPAdapter):
+
+    def __init__(self, ssl_version=None, **kwargs):
+        self._ssl_version = ssl_version
+        super(HTTPieHTTPAdapter, self).__init__(**kwargs)
+
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs['ssl_version'] = self._ssl_version
+        super(HTTPieHTTPAdapter, self).init_poolmanager(*args, **kwargs)
+
+
+def get_requests_session(ssl_version):
+    requests_session = requests.Session()
+    requests_session.mount(
+        'https://',
+        HTTPieHTTPAdapter(ssl_version=ssl_version)
+    )
+    for cls in plugin_manager.get_transport_plugins():
+        transport_plugin = cls()
+        requests_session.mount(prefix=transport_plugin.prefix,
+                               adapter=transport_plugin.get_adapter())
+    return requests_session
 
 
 def get_response(args, config_dir):
     """Send the request and return a `request.Response`."""
 
+    ssl_version = None
+    if args.ssl_version:
+        ssl_version = SSL_VERSION_ARG_MAPPING[args.ssl_version]
+
+    requests_session = get_requests_session(ssl_version)
+    requests_session.max_redirects = args.max_redirects
+
     if not args.session and not args.session_read_only:
-        requests_kwargs = get_requests_kwargs(args)
+        kwargs = get_requests_kwargs(args)
         if args.debug:
-            dump_request(requests_kwargs)
-        response = requests.request(**requests_kwargs)
+            dump_request(kwargs)
+        response = requests_session.request(**kwargs)
     else:
         response = sessions.get_response(
+            requests_session=requests_session,
             args=args,
             config_dir=config_dir,
             session_name=args.session or args.session_read_only,
@@ -35,13 +81,13 @@ def get_response(args, config_dir):
 
 
 def dump_request(kwargs):
-    sys.stderr.write('\n>>> requests.request(%s)\n\n'
-                     % pformat(kwargs))
+    sys.stderr.write('\n>>> requests.request(**%s)\n\n'
+                     % repr_dict_nice(kwargs))
 
 
 def encode_headers(headers):
     # This allows for unicode headers which is non-standard but practical.
-    # See: https://github.com/jakubroztocil/httpie/issues/212
+    # See: https://github.com/jkbrzt/httpie/issues/212
     return dict(
         (name, value.encode('utf8') if isinstance(value, str) else value)
         for name, value in headers.items()
@@ -75,7 +121,7 @@ def get_requests_kwargs(args, base_headers=None):
     # Serialize JSON data, if needed.
     data = args.data
     auto_json = data and not args.form
-    if args.json or auto_json and isinstance(data, dict):
+    if (args.json or auto_json) and isinstance(data, dict):
         if data:
             data = json.dumps(data)
         else:
@@ -98,8 +144,8 @@ def get_requests_kwargs(args, base_headers=None):
     cert = None
     if args.cert:
         cert = args.cert
-        if args.certkey:
-            cert = cert, args.certkey
+        if args.cert_key:
+            cert = cert, args.cert_key
 
     kwargs = {
         'stream': True,

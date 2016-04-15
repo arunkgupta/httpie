@@ -1,8 +1,28 @@
+import os
+from tempfile import gettempdir
+
 import pytest
 
-from httpie import ExitStatus
-from httpie.output.formatters.colors import get_lexer
 from utils import TestEnvironment, http, HTTP_OK, COLOR, CRLF
+from httpie import ExitStatus
+from httpie.compat import urlopen
+from httpie.output.formatters.colors import get_lexer
+
+
+@pytest.mark.parametrize('stdout_isatty', [True, False])
+def test_output_option(httpbin, stdout_isatty):
+    output_filename = os.path.join(gettempdir(), test_output_option.__name__)
+    url = httpbin + '/robots.txt'
+
+    r = http('--output', output_filename, url,
+             env=TestEnvironment(stdout_isatty=stdout_isatty))
+    assert r == ''
+
+    expected_body = urlopen(url).read().decode()
+    with open(output_filename, 'r') as f:
+        actual_body = f.read()
+
+    assert actual_body == expected_body
 
 
 class TestVerboseFlag:
@@ -13,7 +33,7 @@ class TestVerboseFlag:
         assert r.count('__test__') == 2
 
     def test_verbose_form(self, httpbin):
-        # https://github.com/jakubroztocil/httpie/issues/53
+        # https://github.com/jkbrzt/httpie/issues/53
         r = http('--verbose', '--form', 'POST', httpbin.url + '/post',
                  'A=B', 'C=D')
         assert HTTP_OK in r
@@ -25,25 +45,38 @@ class TestVerboseFlag:
         assert HTTP_OK in r
         assert '"baz": "bar"' in r
 
+    def test_verbose_implies_all(self, httpbin):
+        r = http('--verbose', '--follow', httpbin + '/redirect/1')
+        assert 'GET /redirect/1 HTTP/1.1' in r
+        assert 'HTTP/1.1 302 FOUND' in r
+        assert 'GET /get HTTP/1.1' in r
+        assert HTTP_OK in r
+
 
 class TestColors:
 
-    @pytest.mark.parametrize('mime', [
-        'application/json',
-        'application/json+foo',
-        'application/foo+json',
-        'application/json-foo',
-        'application/x-json',
-        'foo/json',
-        'foo/json+bar',
-        'foo/bar+json',
-        'foo/json-foo',
-        'foo/x-json',
-    ])
-    def test_get_lexer(self, mime):
-        lexer = get_lexer(mime)
+    @pytest.mark.parametrize(
+        argnames=['mime', 'explicit_json', 'body', 'expected_lexer_name'],
+        argvalues=[
+            ('application/json',     False, None, 'JSON'),
+            ('application/json+foo', False, None, 'JSON'),
+            ('application/foo+json', False, None, 'JSON'),
+            ('application/json-foo', False, None, 'JSON'),
+            ('application/x-json',   False, None, 'JSON'),
+            ('foo/json',             False, None, 'JSON'),
+            ('foo/json+bar',         False, None, 'JSON'),
+            ('foo/bar+json',         False, None, 'JSON'),
+            ('foo/json-foo',         False, None, 'JSON'),
+            ('foo/x-json',           False, None, 'JSON'),
+            ('application/vnd.comverge.grid+hal+json', False, None, 'JSON'),
+            ('text/plain',           True, '{}', 'JSON'),
+            ('text/plain',           True, 'foo', 'Text only'),
+        ]
+    )
+    def test_get_lexer(self, mime, explicit_json, body, expected_lexer_name):
+        lexer = get_lexer(mime, body=body, explicit_json=explicit_json)
         assert lexer is not None
-        assert lexer.name == 'JSON'
+        assert lexer.name == expected_lexer_name
 
     def test_get_lexer_not_found(self):
         assert get_lexer('xxx/yyy') is None

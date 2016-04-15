@@ -14,7 +14,6 @@ class PyTest(TestCommand):
     # and runs the tests with no fancy stuff like parallel execution.
     def finalize_options(self):
         TestCommand.finalize_options(self)
-        self.test_suite = True
         self.test_args = [
             '--doctest-modules', '--verbose',
             './httpie', './tests'
@@ -31,6 +30,7 @@ tests_require = [
     # https://bitbucket.org/pypa/setuptools/issue/196/
     'pytest-httpbin',
     'pytest',
+    'mock',
 ]
 
 
@@ -39,12 +39,12 @@ install_requires = [
     'Pygments>=1.5'
 ]
 
-### Conditional dependencies:
+# Conditional dependencies:
 
 # sdist
-if not 'bdist_wheel' in sys.argv:
+if 'bdist_wheel' not in sys.argv:
     try:
-        #noinspection PyUnresolvedReferences
+        # noinspection PyUnresolvedReferences
         import argparse
     except ImportError:
         install_requires.append('argparse>=1.2.1')
@@ -74,9 +74,9 @@ setup(
     description=httpie.__doc__.strip(),
     long_description=long_description(),
     url='http://httpie.org/',
-    download_url='https://github.com/jakubroztocil/httpie',
+    download_url='https://github.com/jkbrzt/httpie',
     author=httpie.__author__,
-    author_email='jakub@roztocil.name',
+    author_email='jakub@roztocil.co',
     license=httpie.__licence__,
     packages=find_packages(),
     entry_points={

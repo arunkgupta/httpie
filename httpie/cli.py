@@ -4,7 +4,7 @@ NOTE: the CLI interface may change before reaching v1.0.
 
 """
 from textwrap import dedent, wrap
-#noinspection PyCompatibility
+# noinspection PyCompatibility
 from argparse import (RawDescriptionHelpFormatter, FileType,
                       OPTIONAL, ZERO_OR_MORE, SUPPRESS)
 
@@ -13,13 +13,14 @@ from httpie.plugins.builtin import BuiltinAuthPlugin
 from httpie.plugins import plugin_manager
 from httpie.sessions import DEFAULT_SESSIONS_DIR
 from httpie.output.formatters.colors import AVAILABLE_STYLES, DEFAULT_STYLE
-from httpie.input import (Parser, AuthCredentialsArgType, KeyValueArgType,
+from httpie.input import (HTTPieArgumentParser,
+                          AuthCredentialsArgType, KeyValueArgType,
                           SEP_PROXY, SEP_CREDENTIALS, SEP_GROUP_ALL_ITEMS,
                           OUT_REQ_HEAD, OUT_REQ_BODY, OUT_RESP_HEAD,
                           OUT_RESP_BODY, OUTPUT_OPTIONS,
                           OUTPUT_OPTIONS_DEFAULT, PRETTY_MAP,
                           PRETTY_STDOUT_TTY_ONLY, SessionNameValidator,
-                          readable_file_arg)
+                          readable_file_arg, SSL_VERSION_ARG_MAPPING)
 
 
 class HTTPieHelpFormatter(RawDescriptionHelpFormatter):
@@ -40,7 +41,7 @@ class HTTPieHelpFormatter(RawDescriptionHelpFormatter):
         text = dedent(text).strip() + '\n\n'
         return text.splitlines()
 
-parser = Parser(
+parser = HTTPieArgumentParser(
     formatter_class=HTTPieHelpFormatter,
     description='%s <http://httpie.org>' % __doc__.strip(),
     epilog=dedent("""
@@ -49,9 +50,9 @@ parser = Parser(
 
     Suggestions and bug reports are greatly appreciated:
 
-        https://github.com/jakubroztocil/httpie/issues
+        https://github.com/jkbrzt/httpie/issues
 
-    """)
+    """),
 )
 
 
@@ -250,17 +251,6 @@ output_options.add_argument(
     )
 )
 output_options.add_argument(
-    '--verbose', '-v',
-    dest='output_options',
-    action='store_const',
-    const=''.join(OUTPUT_OPTIONS),
-    help="""
-    Print the whole request as well as the response. Shortcut for --print={0}.
-
-    """
-    .format(''.join(OUTPUT_OPTIONS))
-)
-output_options.add_argument(
     '--headers', '-h',
     dest='output_options',
     action='store_const',
@@ -283,6 +273,42 @@ output_options.add_argument(
     .format(OUT_RESP_BODY)
 )
 
+output_options.add_argument(
+    '--verbose', '-v',
+    dest='verbose',
+    action='store_true',
+    help="""
+    Verbose output. Print the whole request as well as the response. Also print
+    any intermediary requests/responses (such as redirects).
+    It's a shortcut for: --all --print={0}
+
+    """
+    .format(''.join(OUTPUT_OPTIONS))
+)
+output_options.add_argument(
+    '--all',
+    default=False,
+    action='store_true',
+    help="""
+    By default, only the final request/response is shown. Use this flag to show
+    any intermediary requests/responses as well. Intermediary requests include
+    followed redirects (with --follow), the first unauthorized request when
+    Digest auth is used (--auth=digest), etc.
+
+    """
+)
+output_options.add_argument(
+    '--print-others', '-P',
+    dest='output_options_others',
+    metavar='WHAT',
+    help="""
+    The same as --print, -p but applies only to intermediary requests/responses
+    (such as redirects) when their inclusion is enabled with --all. If this
+    options is not specified, then they are formatted the same way as the final
+    response.
+
+    """
+)
 output_options.add_argument(
     '--stream', '-S',
     action='store_true',
@@ -307,8 +333,9 @@ output_options.add_argument(
     dest='output_file',
     metavar='FILE',
     help="""
-    Save output to FILE. If --download is set, then only the response body is
-    saved to the file. Other parts of the HTTP exchange are printed to stderr.
+    Save output to FILE instead of stdout. If --download is also set, then only
+    the response body is saved to FILE. Other parts of the HTTP exchange are
+    printed to stderr.
 
     """
 
@@ -377,7 +404,6 @@ sessions.add_argument(
     """
 )
 
-
 #######################################################################
 # Authentication
 #######################################################################
@@ -397,7 +423,7 @@ auth.add_argument(
 
 _auth_plugins = plugin_manager.get_auth_plugins()
 auth.add_argument(
-    '--auth-type',
+    '--auth-type', '-A',
     choices=[plugin.auth_type for plugin in _auth_plugins],
     default=_auth_plugins[0].auth_type,
     help="""
@@ -444,45 +470,21 @@ network.add_argument(
     """
 )
 network.add_argument(
-    '--follow',
+    '--follow', '-F',
     default=False,
     action='store_true',
     help="""
-    Set this flag if full redirects are allowed (e.g. re-POST-ing of data at
-    new Location).
-
-    """
-)
-network.add_argument(
-    '--verify',
-    default='yes',
-    help="""
-    Set to "no" to skip checking the host's SSL certificate. You can also pass
-    the path to a CA_BUNDLE file for private certs. You can also set the
-    REQUESTS_CA_BUNDLE environment variable. Defaults to "yes".
+    Follow 30x Location redirects.
 
     """
 )
 
 network.add_argument(
-    '--cert',
-    default=None,
-    type=readable_file_arg,
+    '--max-redirects',
+    type=int,
+    default=30,
     help="""
-    You can specify a local cert to use as client side SSL certificate.
-    This file may either contain both private key and certificate or you may
-    specify --certkey separately.
-
-    """
-)
-
-network.add_argument(
-    '--certkey',
-    default=None,
-    type=readable_file_arg,
-    help="""
-    The private key to use with SSL. Only needed if --cert is given and the
-    certificate file does not contain the private key.
+    By default, requests have a limit of 30 redirects (works with --follow).
 
     """
 )
@@ -515,6 +517,57 @@ network.add_argument(
     """
 )
 
+
+#######################################################################
+# SSL
+#######################################################################
+
+ssl = parser.add_argument_group(title='SSL')
+ssl.add_argument(
+    '--verify',
+    default='yes',
+    help="""
+    Set to "no" to skip checking the host's SSL certificate. You can also pass
+    the path to a CA_BUNDLE file for private certs. You can also set the
+    REQUESTS_CA_BUNDLE environment variable. Defaults to "yes".
+
+    """
+)
+ssl.add_argument(
+    '--ssl',  # TODO: Maybe something more general, such as --secure-protocol?
+    dest='ssl_version',
+    choices=list(sorted(SSL_VERSION_ARG_MAPPING.keys())),
+    help="""
+    The desired protocol version to use. This will default to
+    SSL v2.3 which will negotiate the highest protocol that both
+    the server and your installation of OpenSSL support. Available protocols
+    may vary depending on OpenSSL installation (only the supported ones
+    are shown here).
+
+    """
+)
+ssl.add_argument(
+    '--cert',
+    default=None,
+    type=readable_file_arg,
+    help="""
+    You can specify a local cert to use as client side SSL certificate.
+    This file may either contain both private key and certificate or you may
+    specify --cert-key separately.
+
+    """
+)
+
+ssl.add_argument(
+    '--cert-key',
+    default=None,
+    type=readable_file_arg,
+    help="""
+    The private key to use with SSL. Only needed if --cert is given and the
+    certificate file does not contain the private key.
+
+    """
+)
 
 #######################################################################
 # Troubleshooting
@@ -554,7 +607,7 @@ troubleshooting.add_argument(
     action='store_true',
     default=False,
     help="""
-    Prints exception traceback should one occur.
+    Prints the exception traceback should one occur.
 
     """
 )
@@ -563,8 +616,8 @@ troubleshooting.add_argument(
     action='store_true',
     default=False,
     help="""
-    Prints exception traceback should one occur, and also other information
-    that is useful for debugging HTTPie itself and for reporting bugs.
+    Prints the exception traceback should one occur, as well as other
+    information useful for debugging HTTPie itself and for reporting bugs.
 
     """
 )

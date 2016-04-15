@@ -7,6 +7,7 @@ from __future__ import division
 import os
 import re
 import sys
+import errno
 import mimetypes
 import threading
 from time import sleep, time
@@ -104,7 +105,7 @@ def filename_from_content_disposition(content_disposition):
     :return: the filename if present and valid, otherwise `None`
 
     """
-    # attachment; filename=jakubroztocil-httpie-0.4.1-20-g40bd8f6.tar.gz
+    # attachment; filename=jkbrzt-httpie-0.4.1-20-g40bd8f6.tar.gz
 
     msg = Message('Content-Disposition: %s' % content_disposition)
     filename = msg.get_filename()
@@ -135,16 +136,51 @@ def filename_from_url(url, content_type):
     return fn
 
 
+def trim_filename(filename, max_len):
+    if len(filename) > max_len:
+        trim_by = len(filename) - max_len
+        name, ext = os.path.splitext(filename)
+        if trim_by >= len(name):
+            filename = filename[:-trim_by]
+        else:
+            filename = name[:-trim_by] + ext
+    return filename
+
+
+def get_filename_max_length(directory):
+    max_len = 255
+    try:
+        pathconf = os.pathconf
+    except AttributeError:
+        pass  # non-posix
+    else:
+        try:
+            max_len = pathconf(directory, 'PC_NAME_MAX')
+        except OSError as e:
+            if e.errno != errno.EINVAL:
+                raise
+    return max_len
+
+
+def trim_filename_if_needed(filename, directory='.', extra=0):
+    max_len = get_filename_max_length(directory) - extra
+    if len(filename) > max_len:
+        filename = trim_filename(filename, max_len)
+    return filename
+
+
 def get_unique_filename(filename, exists=os.path.exists):
     attempt = 0
     while True:
         suffix = '-' + str(attempt) if attempt > 0 else ''
-        if not exists(filename + suffix):
-            return filename + suffix
+        try_filename = trim_filename_if_needed(filename, extra=len(suffix))
+        try_filename += suffix
+        if not exists(try_filename):
+            return try_filename
         attempt += 1
 
 
-class Download(object):
+class Downloader(object):
 
     def __init__(self, output_file=None,
                  resume=False, progress_file=sys.stderr):
@@ -178,8 +214,8 @@ class Download(object):
         :type request_headers: dict
 
         """
-        # Disable content encoding so that we can resume, etc.
-        request_headers['Accept-Encoding'] = None
+        # Ask the server not to encode the content so that we can resume, etc.
+        request_headers['Accept-Encoding'] = 'identity'
         if self._resume:
             bytes_have = os.path.getsize(self._output_file.name)
             if bytes_have:
@@ -201,6 +237,8 @@ class Download(object):
         """
         assert not self.status.time_started
 
+        # FIXME: some servers still might sent Content-Encoding: gzip
+        # <https://github.com/jkbrzt/httpie/issues/423>
         try:
             total_size = int(response.headers['Content-Length'])
         except (KeyError, ValueError, TypeError):
@@ -299,8 +337,7 @@ class Status(object):
 
     def started(self, resumed_from=0, total_size=None):
         assert self.time_started is None
-        if total_size is not None:
-            self.total_size = total_size
+        self.total_size = total_size
         self.downloaded = self.resumed_from = resumed_from
         self.time_started = time()
 

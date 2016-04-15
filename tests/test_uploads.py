@@ -23,6 +23,7 @@ class TestMultipartFormDataFileUpload:
                ' filename="%s"' % os.path.basename(FILE_PATH) in r
         assert FILE_CONTENT in r
         assert '"foo": "bar"' in r
+        assert 'Content-Type: text/plain' in r
 
     def test_upload_multiple_fields_with_the_same_name(self, httpbin):
         r = http('--form', '--verbose', 'POST', httpbin.url + '/post',
@@ -30,10 +31,11 @@ class TestMultipartFormDataFileUpload:
                  'test-file@%s' % FILE_PATH_ARG)
         assert HTTP_OK in r
         assert r.count('Content-Disposition: form-data; name="test-file";'
-               ' filename="%s"' % os.path.basename(FILE_PATH)) == 2
+                       ' filename="%s"' % os.path.basename(FILE_PATH)) == 2
         # Should be 4, but is 3 because httpbin
         # doesn't seem to support filed field lists
         assert r.count(FILE_CONTENT) in [3, 4]
+        assert r.count('Content-Type: text/plain') == 2
 
 
 class TestRequestBodyFromFilePath:

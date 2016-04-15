@@ -48,11 +48,18 @@ class HTTPResponse(HTTPMessage):
     def iter_lines(self, chunk_size):
         return ((line, b'\n') for line in self._orig.iter_lines(chunk_size))
 
-    #noinspection PyProtectedMember
+    # noinspection PyProtectedMember
     @property
     def headers(self):
         original = self._orig.raw._original_response
-        version = {9: '0.9', 10: '1.0', 11: '1.1'}[original.version]
+
+        version = {
+            9: '0.9',
+            10: '1.0',
+            11: '1.1',
+            20: '2',
+        }[original.version]
+
         status_line = 'HTTP/{version} {status} {reason}'.format(
             version=version,
             status=original.status,

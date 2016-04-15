@@ -1,8 +1,9 @@
 import sys
 
-from requests.compat import is_windows
-
+from httpie.compat import is_windows
 from httpie.config import DEFAULT_CONFIG_DIR, Config
+
+from httpie.utils import repr_dict_nice
 
 
 class Environment(object):
@@ -30,7 +31,11 @@ class Environment(object):
         import curses
         try:
             curses.setupterm()
-            colors = curses.tigetnum('colors')
+            try:
+                colors = curses.tigetnum('colors')
+            except TypeError:
+                # pypy3 (2.4.0)
+                colors = curses.tigetnum(b'colors')
         except curses.error:
             pass
         del curses
@@ -79,3 +84,17 @@ class Environment(object):
             else:
                 self._config.load()
         return self._config
+
+    def __str__(self):
+        defaults = dict(type(self).__dict__)
+        actual = dict(defaults)
+        actual.update(self.__dict__)
+        actual['config'] = self.config
+        return repr_dict_nice(dict(
+            (key, value)
+            for key, value in actual.items()
+            if not key.startswith('_'))
+        )
+
+    def __repr__(self):
+        return '<{0} {1}>'.format(type(self).__name__, str(self))

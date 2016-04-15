@@ -2,9 +2,9 @@
 import json
 # noinspection PyCompatibility
 import argparse
-import os
 
 import pytest
+from requests.exceptions import InvalidSchema
 
 from httpie import input
 from httpie.input import KeyValue, KeyValueArgType, DataDict
@@ -154,7 +154,7 @@ class TestQuerystring:
         assert '"url": "%s"' % url in r
 
 
-class TestURLshorthand:
+class TestLocalhostShorthand:
     def test_expand_localhost_shorthand(self):
         args = parser.parse_args(args=[':'], env=TestEnvironment())
         assert args.url == 'http://localhost'
@@ -201,7 +201,7 @@ class TestURLshorthand:
 class TestArgumentParser:
 
     def setup_method(self, method):
-        self.parser = input.Parser()
+        self.parser = input.HTTPieArgumentParser()
 
     def test_guess_when_method_set_and_valid(self):
         self.parser.args = argparse.Namespace()
@@ -321,3 +321,12 @@ class TestIgnoreStdin:
                  error_exit_ok=True)
         assert r.exit_status == ExitStatus.ERROR
         assert 'because --ignore-stdin' in r.stderr
+
+
+class TestSchemes:
+
+    def test_custom_scheme(self):
+        # InvalidSchema is expected because HTTPie
+        # shouldn't touch a formally valid scheme.
+        with pytest.raises(InvalidSchema):
+            http('foo+bar-BAZ.123://bah')

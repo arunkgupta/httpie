@@ -2,34 +2,30 @@
 HTTPie: a CLI, cURL-like tool for humans
 ****************************************
 
-
-HTTPie (pronounced *aych-tee-tee-pie*) is a **command line HTTP client**.  Its
-goal is to make CLI interaction with web services as **human-friendly** as
-possible. It provides a simple ``http`` command that allows for sending
+HTTPie (pronounced *aitch-tee-tee-pie*) is a **command line HTTP client**.
+Its goal is to make CLI interaction with web services as **human-friendly**
+as possible. It provides a simple ``http`` command that allows for sending
 arbitrary HTTP requests using a simple and natural syntax, and displays
-colorized responses. HTTPie can be used for **testing, debugging**, and
+colorized output. HTTPie can be used for **testing, debugging**, and
 generally **interacting** with HTTP servers.
 
 
-.. image:: https://github.com/jakubroztocil/httpie/raw/master/httpie.png
+.. image:: https://raw.githubusercontent.com/jkbrzt/httpie/master/httpie.png
     :alt: HTTPie compared to cURL
-    :width: 835
-    :height: 835
+    :width: 679
+    :height: 781
     :align: center
 
-
-------
-
-
-.. image:: https://raw.github.com/claudiatd/httpie-artwork/master/images/httpie_logo_simple.png
-    :alt: HTTPie logo
-    :align: center
 
 HTTPie is written in Python, and under the hood it uses the excellent
 `Requests`_ and `Pygments`_ libraries.
 
 
-**Table of Contents**
+-----
+
+|pypi| |unix_build| |windows_build| |coverage| |gitter|
+
+-----
 
 
 .. contents::
@@ -63,21 +59,31 @@ Installation
 ============
 
 
-
-------------------------
-Stable version |version|
-------------------------
-
-On **Mac OS X**, HTTPie can be installed via `Homebrew <http://brew.sh/>`_:
+On **Mac OS X**, HTTPie can be installed via `Homebrew <http://brew.sh/>`_
+(recommended):
 
 .. code-block:: bash
 
     $ brew install httpie
 
 
-Most **Linux** distributions provide a package that can be installed via
-system package manager, e.g. ``yum install httpie`` or ``apt-get install httpie``.
-Note that the package might include a slightly older version of HTTPie.
+A MacPorts *port* is also available:
+
+.. code-block:: bash
+
+    $ port install httpie
+
+
+Most **Linux** distributions provide a package that can be installed using the
+system package manager, e.g.:
+
+.. code-block:: bash
+
+    # Debian-based distributions such as Ubuntu:
+    $ apt-get install httpie
+
+    # RPM-based distributions:
+    $ yum install httpie
 
 
 A **universal installation method** (that works on **Windows**, Mac OS X, Linux, …,
@@ -86,23 +92,19 @@ and provides the latest version) is to use `pip`_:
 
 .. code-block:: bash
 
+    # Make sure we have an up-to-date version of pip and setuptools:
+    $ pip install --upgrade pip setuptools
+
     $ pip install --upgrade httpie
 
 
-If the above fails, please use ``easy_install`` instead (``$ easy_install httpie``).
-
-
+(If ``pip`` installation fails for some reason, you can try
+``easy_install httpie`` as a fallback.)
 
 
 -------------------
 Development version
 -------------------
-
-=============  =============
-Mac/Linux      Windows
-|unix|         |windows|
-=============  =============
-
 
 The **latest development version** can be installed directly from GitHub:
 
@@ -112,7 +114,7 @@ The **latest development version** can be installed directly from GitHub:
     $ brew install httpie --HEAD
 
     # Universal
-    $ pip install --upgrade https://github.com/jakubroztocil/httpie/tarball/master
+    $ pip install --upgrade https://github.com/jkbrzt/httpie/archive/master.tar.gz
 
 
 
@@ -165,12 +167,12 @@ See the request that is being sent using one of the `output options`_:
 
 
 Use `Github API`_ to post a comment on an
-`issue <https://github.com/jakubroztocil/httpie/issues/83>`_
+`issue <https://github.com/jkbrzt/httpie/issues/83>`_
 with `authentication`_:
 
 .. code-block:: bash
 
-    $ http -a USERNAME POST https://api.github.com/repos/jakubroztocil/httpie/issues/83/comments body='HTTPie is awesome!'
+    $ http -a USERNAME POST https://api.github.com/repos/jkbrzt/httpie/issues/83/comments body='HTTPie is awesome!'
 
 
 Upload a file using `redirected input`_:
@@ -283,20 +285,22 @@ If the port is omitted, then port 80 is assumed.
     GET / HTTP/1.1
     Host: localhost
 
-If find yourself manually constructing URLs with **querystring parameters**
+If you find yourself manually constructing URLs with **querystring parameters**
 on the terminal, you may appreciate the ``param==value`` syntax for appending
-URL parameters so that you don't have to worry about escaping the ``&``
-separators. To search for ``HTTPie`` on Google Images you could use this
-command:
+URL parameters. With that, you don't have to worry about escaping the ``&``
+separators for you shell. Also, special characters in parameter values,
+will also automatically escaped (HTTPie otherwise expects the URL to be
+already escaped). To search for ``HTTPie logo`` on Google Images you could use
+this command:
 
 .. code-block:: bash
 
-    $ http GET www.google.com search==HTTPie tbm==isch
+    $ http www.google.com search=='HTTPie logo' tbm==isch
 
 
 .. code-block:: http
 
-    GET /?search=HTTPie&tbm=isch HTTP/1.1
+    GET /?search=HTTPie+logo&tbm=isch HTTP/1.1
 
 
 =============
@@ -321,7 +325,7 @@ their type is distinguished only by the separator used:
 +-----------------------+-----------------------------------------------------+
 | URL parameters        | Appends the given name/value pair as a query        |
 | ``name==value``       | string parameter to the URL.                        |
-|                       | The ``==`` separator is used                        |
+|                       | The ``==`` separator is used.                       |
 +-----------------------+-----------------------------------------------------+
 | Data Fields           | Request data fields to be serialized as a JSON      |
 | ``field=value``,      | object (default), or to be form-encoded             |
@@ -339,11 +343,29 @@ their type is distinguished only by the separator used:
 |                       | in a ``multipart/form-data`` request.               |
 +-----------------------+-----------------------------------------------------+
 
+
 You can use ``\`` to escape characters that shouldn't be used as separators
 (or parts thereof). For instance, ``foo\==bar`` will become a data key/value
 pair (``foo=`` and ``bar``) instead of a URL parameter.
 
-You can also quote values, e.g. ``foo="bar baz"``.
+Often it is necessary to quote the values, e.g. ``foo='bar baz'``.
+
+If any of the field names or headers starts with a minus
+(e.g., ``-fieldname``), you need to place all such items after the special
+token ``--`` to prevent confusion with ``--arguments``:
+
+.. code-block:: bash
+
+    $ http httpbin.org/post  --  -name-starting-with-dash=foo --Weird-Header:bar
+
+.. code-block:: http
+
+    POST /post HTTP/1.1
+    --Weird-Header: bar
+
+    {
+        "-name-starting-with-dash": "value"
+    }
 
 Note that data fields aren't the only way to specify request data:
 `Redirected input`_ allows for passing arbitrary data to be sent with the
@@ -362,14 +384,16 @@ object by default. HTTPie also automatically sets the following headers,
 both of which can be overwritten:
 
 ================    =======================================
-``Content-Type``    ``application/json; charset=utf-8``
+``Content-Type``    ``application/json``
 ``Accept``          ``application/json``
 ================    =======================================
 
 You can use ``--json, -j`` to explicitly set ``Accept``
 to ``application/json`` regardless of whether you are sending data
 (it's a shortcut for setting the header via the usual header notation –
-``http url Accept:application/json``).
+``http url Accept:application/json``). Additionally,
+HTTPie will try to detect JSON responses even when the
+``Content-Type`` is incorrectly ``text/plain`` or unknown.
 
 Simple example:
 
@@ -381,8 +405,8 @@ Simple example:
 
     PUT / HTTP/1.1
     Accept: application/json
-    Accept-Encoding: identity, deflate, compress, gzip
-    Content-Type: application/json; charset=utf-8
+    Accept-Encoding: gzip, deflate
+    Content-Type: application/json
     Host: example.org
 
     {
@@ -408,7 +432,7 @@ fields using ``=@`` and ``:=@``:
 
     PUT /person/1 HTTP/1.1
     Accept: application/json
-    Content-Type: application/json; charset=utf-8
+    Content-Type: application/json
     Host: api.example.com
 
     {
@@ -452,7 +476,8 @@ Regular Forms
 
 .. code-block:: bash
 
-    $ http --form POST api.example.org/person/1 name='John Smith' email=john@example.org cv=@~/Documents/cv.txt
+    $ http --form POST api.example.org/person/1 name='John Smith' \
+        email=john@example.org cv=@~/Documents/cv.txt
 
 
 .. code-block:: http
@@ -497,14 +522,15 @@ To set custom headers you can use the ``Header:Value`` notation:
 
 .. code-block:: bash
 
-    $ http example.org  User-Agent:Bacon/1.0  'Cookie:valued-visitor=yes;foo=bar'  X-Foo:Bar  Referer:http://httpie.org/
+    $ http example.org  User-Agent:Bacon/1.0  'Cookie:valued-visitor=yes;foo=bar'  \
+        X-Foo:Bar  Referer:http://httpie.org/
 
 
 .. code-block:: http
 
     GET / HTTP/1.1
     Accept: */*
-    Accept-Encoding: identity, deflate, compress, gzip
+    Accept-Encoding: gzip, deflate
     Cookie: valued-visitor=yes;foo=bar
     Host: example.org
     Referer: http://httpie.org/
@@ -518,7 +544,7 @@ There are a couple of default headers that HTTPie sets:
 
     GET / HTTP/1.1
     Accept: */*
-    Accept-Encoding: identity, deflate, compress, gzip
+    Accept-Encoding: gzip, deflate
     User-Agent: HTTPie/<version>
     Host: <taken-from-URL>
 
@@ -538,12 +564,12 @@ The currently supported authentication schemes are Basic and Digest
                         the argument. Or, if you only specify a username
                         (``-a username``), you'll be prompted for
                         the password before the request is sent.
-                        To send a an empty password, pass ``username:``.
+                        To send an empty password, pass ``username:``.
                         The ``username:password@hostname`` URL syntax is
                         supported as well (but credentials passed via ``-a``
                         have higher priority).
 
-``--auth-type``         Specify the auth mechanism. Possible values are
+``--auth-type, -A``     Specify the auth mechanism. Possible values are
                         ``basic`` and ``digest``. The default value is
                         ``basic`` so it can often be omitted.
 ===================     ======================================================
@@ -563,7 +589,7 @@ Digest auth:
 
 .. code-block:: bash
 
-    $ http --auth-type=digest -a username:password example.org
+    $ http -A digest -a username:password example.org
 
 
 With password prompt:
@@ -591,10 +617,34 @@ Authorization information from your ``~/.netrc`` file is honored as well:
 Auth Plugins
 ------------
 
-* `httpie-oauth <https://github.com/jakubroztocil/httpie-oauth>`_: OAuth
-* `httpie-ntlm <https://github.com/jakubroztocil/httpie-ntlm>`_: NTLM (NT LAN Manager)
+* `httpie-oauth <https://github.com/jkbrzt/httpie-oauth>`_: OAuth
+* `httpie-hmac-auth <https://github.com/guardian/httpie-hmac-auth>`_: HMAC
+* `httpie-ntlm <https://github.com/jkbrzt/httpie-ntlm>`_: NTLM (NT LAN Manager)
 * `httpie-negotiate <https://github.com/ndzou/httpie-negotiate>`_: SPNEGO (GSS Negotiate)
 * `requests-hawk <https://github.com/mozilla-services/requests-hawk>`_: Hawk
+* `httpie-api-auth <https://github.com/pd/httpie-api-auth>`_: ApiAuth
+* `httpie-edgegrid <https://github.com/akamai-open/httpie-edgegrid>`_: EdgeGrid
+* `httpie-jwt-auth <https://github.com/teracyhq/httpie-jwt-auth>`_: JWTAuth (JSON Web Tokens)
+
+
+==============
+HTTP Redirects
+==============
+
+By default, HTTP redirects are not followed and only the first
+response is shown. To instruct HTTPie to follow the ``Location`` header of
+``30x`` responses and show the final response instead, use the ``--follow, -F`` option.
+
+If you additionally wish to see the intermediary requests/responses,
+then use the ``--all`` option as well.
+
+To change the default limit of maximum 30 redirects, use the
+``--max-redirects=<limit>`` option.
+
+
+.. code-block:: bash
+
+    $ http --follow --all --max-redirects=5 httpbin.org/redirect/3
 
 
 =======
@@ -633,17 +683,77 @@ In your ``~/.bash_profile``:
 HTTPS
 =====
 
-To skip the host's SSL certificate verification, you can pass ``--verify=no``
-(default is ``yes``). You can also use ``--verify`` to set a custom CA bundle
-path. The path can also be configured via the environment variable
-``REQUESTS_CA_BUNDLE``.
+-----------------------------------
+Server SSL certificate verification
+-----------------------------------
 
-To use a client side certificate for the SSL communication, you can pass the
-path of the cert file with ``--cert``. If the private key is not contained
-in the cert file you may pass the path of the key file with ``--certkey``.
+To skip the **host's SSL certificate verification,** you can pass
+``--verify=no`` (default is ``yes``):
 
-If you use Python 2.x and need to talk to servers that use **SNI (Server Name
-Indication)** you need to install some additional dependencies:
+.. code-block:: bash
+
+    $ http --verify=no https://example.org
+
+
+You can also use ``--verify=<CA_BUNDLE_PATH>`` to set a **custom CA bundle**
+path:
+
+.. code-block:: bash
+
+    $ http --verify=/ssl/custom_ca_bundle https://example.org
+
+
+The path can also be configured via the environment variable
+``REQUESTS_CA_BUNDLE`` (picked up by the underlying python-requests library):
+
+.. code-block:: bash
+
+    $ REQUESTS_CA_BUNDLE=/ssl/custom_ca_bundle http https://example.org
+
+
+---------------------------
+Client side SSL certificate
+---------------------------
+To use a **client side certificate** for the SSL communication, you can pass
+the path of the cert file with ``--cert``:
+
+.. code-block:: bash
+
+    $ http --cert=client.pem https://example.org
+
+
+If the **private key** is not contained in the cert file you may pass the
+path of the key file with ``--cert-key``:
+
+.. code-block:: bash
+
+    $ http --cert=client.crt --cert-key=client.key https://example.org
+
+
+-----------
+SSL version
+-----------
+
+Use the ``--ssl=<PROTOCOL>`` to specify the desired protocol version to use.
+This will default to SSL v2.3 which will negotiate the highest protocol that both
+the server and your installation of OpenSSL support. The available protocols
+are ``ssl2.3``, ``ssl3``, ``tls1``, ``tls1.1``, ```tls1.2``. (The actually
+available set of protocols may vary depending on your OpenSSL installation.)
+
+.. code-block:: bash
+
+    # Specify the vulnerable SSL v3 protocol to talk to an outdated server:
+    $ http --ssl=ssl3 https://vulnerable.example.org
+
+
+----------------------------
+SNI (Server Name Indication)
+----------------------------
+
+If you use HTTPie with Python < 2.7.9
+(can be verified with ``python --version``) and need to talk to servers that
+use **SNI (Server Name Indication)** you need to install some additional
+dependencies:
 
 .. code-block:: bash
 
@@ -661,8 +771,8 @@ You can use the following command to test SNI support:
 Output Options
 ==============
 
-By default, HTTPie outputs the whole response message (headers as well as the
-body).
+By default, HTTPie only outputs the final response and the whole response
+message is printed (headers as well as the body).
 
 You can control what should be printed via several options:
 
@@ -670,6 +780,7 @@ You can control what should be printed via several options:
 ``--headers, -h``   Only the response headers are printed.
 ``--body, -b``      Only the response body is printed.
 ``--verbose, -v``   Print the whole HTTP exchange (request and response).
+                    This option also enables ``--all`` (see bellow).
 ``--print, -p``     Selects parts of the HTTP exchange.
 =================   =====================================================
 
@@ -681,8 +792,8 @@ documentation examples:
     $ http --verbose PUT httpbin.org/put hello=world
     PUT /put HTTP/1.1
     Accept: application/json
-    Accept-Encoding: identity, deflate, compress, gzip
-    Content-Type: application/json; charset=utf-8
+    Accept-Encoding: gzip, deflate
+    Content-Type: application/json
     Host: httpbin.org
     User-Agent: HTTPie/0.2.7dev
 
@@ -710,10 +821,10 @@ the HTTP exchange:
 ==========  ==================
 Character   Stands for
 ==========  ==================
-``H``       Request headers.
-``B``       Request body.
-``h``       Response headers.
-``b``       Response body.
+``H``       request headers
+``B``       request body
+``h``       response headers
+``b``       response body
 ==========  ==================
 
 Print request and response headers:
@@ -721,6 +832,34 @@ Print request and response headers:
 .. code-block:: bash
 
     $ http --print=Hh PUT httpbin.org/put hello=world
+
+
+---------------------------------------
+Viewing Intermediary Requests/Responses
+---------------------------------------
+
+To see *all* the HTTP communication, i.e. the final request/resposne as
+well as any possible  intermediary requests/responses, use the **``--all``**
+option. The intermediary HTTP communication include followed redirects
+(with ``--follow``), the first unauthorized request when HTTP digest
+authentication is used (``--auth=digest``), etc.
+
+.. code-block:: bash
+
+    # Include all responses that lead to the final one:
+    $ http --all --follow httpbin.org/redirect/3
+
+
+The intermediary requests/response are by default formatted according to
+``--print, -p`` (and its shortcuts described above). If you'd like to change
+that, use the **``--print-others, -P``** option. It takes the same
+arguments as ``--print, -p`` but applies to the intermediary requests only.
+
+
+.. code-block:: bash
+
+    # Print the intermediary requests/responses differently than the final one:
+    $ http -A digest -a foo:bar --all -p Hh -P H httpbin.org/digest-auth/auth/foo/bar
 
 
 -------------------------
@@ -782,7 +921,7 @@ You can even pipe web services together using HTTPie:
 
 .. code-block:: bash
 
-    $ http GET https://api.github.com/repos/jakubroztocil/httpie | http POST httpbin.org/post
+    $ http GET https://api.github.com/repos/jkbrzt/httpie | http POST httpbin.org/post
 
 
 You can use ``cat`` to enter multiline data on the terminal:
@@ -852,7 +991,7 @@ Colors and Formatting
 ---------------------
 
 Syntax highlighting is applied to HTTP headers and bodies (where it makes
-sense). You can choose your prefered color scheme via the ``--style`` option
+sense). You can choose your preferred color scheme via the ``--style`` option
 if you don't like the default one (see ``$ http --help`` for the possible
 values).
 
@@ -861,7 +1000,6 @@ Also, the following formatting is applied:
 * HTTP headers are sorted by name.
 * JSON data is indented, sorted by keys, and unicode escapes are converted
   to the characters they represent.
-* XML data is indented for better readability.
 
 One of these options can be used to control output processing:
 
@@ -966,20 +1104,17 @@ is being saved to a file.
 
 .. code-block:: bash
 
-    $ http --download https://github.com/jakubroztocil/httpie/tarball/master
+    $ http --download https://github.com/jkbrzt/httpie/archive/master.tar.gz
 
 .. code-block:: http
 
     HTTP/1.1 200 OK
-    Connection: keep-alive
-    Content-Disposition: attachment; filename=jakubroztocil-httpie-0.4.1-33-gfc4f70a.tar.gz
-    Content-Length: 505530
+    Content-Disposition: attachment; filename=httpie-master.tar.gz
+    Content-Length: 257336
     Content-Type: application/x-gzip
-    Server: GitHub.com
-    Vary: Accept-Encoding
 
-    Downloading 494.89 kB to "jakubroztocil-httpie-0.4.1-33-gfc4f70a.tar.gz"
-    /  21.01% 104.00 kB   47.55 kB/s  0:00:08 ETA
+    Downloading 251.30 kB to "httpie-master.tar.gz"
+    Done. 251.30 kB in 2.73862s (91.76 kB/s)
 
 
 If not provided via ``--output, -o``, the output filename will be determined
@@ -992,7 +1127,7 @@ headers and progress are still shown in the terminal:
 
 .. code-block:: bash
 
-    $ http -d https://github.com/jakubroztocil/httpie/tarball/master |  tar zxf -
+    $ http -d https://github.com/jkbrzt/httpie/archive/master.tar.gz |  tar zxf -
 
 
 If ``--output, -o`` is specified, you can resume a partial download using the
@@ -1123,36 +1258,32 @@ Config
 HTTPie uses a simple configuration file that contains a JSON object with the
 following keys:
 
-=========================     =================================================
-``__meta__``                  HTTPie automatically stores some metadata here.
-                              Do not change.
 
-``implicit_content_type``     A ``String`` specifying the implicit content type
-                              for request data. The default value for this
-                              option is ``json`` and can be changed to
-                              ``form``.
+------------
+``__meta__``
+------------
 
-``default_options``           An ``Array`` (by default empty) of options
-                              that should be applied to every request.
+HTTPie automatically stores some of its metadata here. Do not change.
 
-                              For instance, you can use this option to change
-                              the default style and output options:
-                              ``"default_options": ["--style=fruity", "--body"]``
 
-                              Another useful default option is
-                              ``"--session=default"`` to make HTTPie always
-                              use `sessions`_.
+-------------------
+``default_options``
+-------------------
 
-                              Default options from config file can be unset
-                              for a particular invocation via
-                              ``--no-OPTION`` arguments passed on the
-                              command line (e.g., ``--no-style``
-                              or ``--no-session``).
-=========================     =================================================
+An ``Array`` (by default empty) of default options that should be applied to
+every invocation of HTTPie.
 
-The default location of the configuration file is ``~/.httpie/config.json``
-(or ``%APPDATA%\httpie\config.json`` on Windows).
+For instance, you can use this option to change the default style and output
+options: ``"default_options": ["--style=fruity", "--body"]`` Another useful
+default option could be ``"--session=default"`` to make HTTPie always
+use `sessions`_ (one named ``default`` will automatically be used).
+Or you could change the implicit request content type from JSON to form by
+adding ``--form`` to the list.
 
+Default options from config file can be unset for a particular invocation via
+``--no-OPTION`` arguments passed on the command line (e.g., ``--no-style``
+or ``--no-session``). The default location of the configuration file is
+``~/.httpie/config.json`` (or ``%APPDATA%\httpie\config.json`` on Windows).
 The config directory location can be changed by setting the
 ``HTTPIE_CONFIG_DIR`` environment variable.
 
@@ -1184,6 +1315,7 @@ Also, the ``--timeout`` option allows to overwrite the default 30s timeout:
             3) echo 'Unexpected HTTP 3xx Redirection!' ;;
             4) echo 'HTTP 4xx Client Error!' ;;
             5) echo 'HTTP 5xx Server Error!' ;;
+            6) echo 'Exceeded --max-redirects=<n> redirects!' ;;
             *) echo 'Other Error!' ;;
         esac
     fi
@@ -1232,14 +1364,32 @@ and usage from scripts, where HTTPie serves as a generic HTTP client.
 As HTTPie is still under heavy development, the existing command line
 syntax and some of the ``--OPTIONS`` may change slightly before
 HTTPie reaches its final version ``1.0``. All changes are recorded in the
-`changelog`_.
+`change log`_.
 
 
-==========
-Contribute
-==========
 
-Please see `CONTRIBUTING`_.
+=======
+Support
+=======
+
+Please use the following support channels:
+
+* `GitHub issues <https://github.com/jkbr/httpie/issues>`_
+  for bug reports and feature requests.
+* `Our Gitter chat room <https://gitter.im/jkbrzt/httpie>`_
+  to ask questions, discuss features, and for general discussion.
+* `StackOverflow <https://stackoverflow.com>`_
+  to ask questions (please make sure to use the
+  `httpie <http://stackoverflow.com/questions/tagged/httpie>`_ tag).
+* You can also tweet directly to `@jkbrzt`_.
+
+=======
+Authors
+=======
+
+
+`Jakub Roztocil`_  (`@jkbrzt`_) created HTTPie and `these fine people`_
+have contributed.
 
 
 ====
@@ -1248,180 +1398,56 @@ Logo
 
 Please see `claudiatd/httpie-artwork`_
 
-=======
-Authors
-=======
 
-`Jakub Roztocil`_  (`@jakubroztocil`_) created HTTPie and `these fine people`_
-have contributed.
+==========
+Contribute
+==========
+
+Please see `CONTRIBUTING <https://github.com/jkbrzt/httpie/blob/master/CONTRIBUTING.rst>`_.
+
+
+==========
+Change Log
+==========
+
+Please see `CHANGELOG <https://github.com/jkbrzt/httpie/blob/master/CHANGELOG.rst>`_.
+
 
 =======
 Licence
 =======
 
-Please see `LICENSE`_.
+Please see `LICENSE <https://github.com/jkbrzt/httpie/blob/master/LICENSE>`_.
 
-
-=========
-Changelog
-=========
-
-*You can click a version name to see a diff with the previous one.*
-
-* `0.9.0-dev`_
-    * Added ``--cert`` and ``--certkey`` parameters to specify a client side
-      certificate and private key for SSL
-    * Improved unicode support.
-    * Switched from ``unittest`` to ``pytest``.
-    * Various test suite improvements.
-    * Added `CONTRIBUTING`_.
-    * Fixed ``User-Agent`` overwriting when used within a session.
-    * Fixed handling of empty passwords in URL credentials.
-    * Fixed multiple file uploads with the same form field name.
-    * To make it easier to deal with Windows paths in request items, ``\``
-      now only escapes special characters (the ones that are used as key-value
-      separators).
-    * Fixed ``--output=/dev/null`` on Linux.
-    * Improved terminal color depth detection via ``curses``.
-* `0.8.0`_ (2014-01-25)
-    * Added ``field=@file.txt`` and ``field:=@file.json`` for embedding
-      the contents of text and JSON files into request data.
-    * Added curl-style shorthand for localhost.
-    * Fixed request ``Host`` header value output so that it doesn't contain
-      credentials, if included in the URL.
-* `0.7.1`_ (2013-09-24)
-    * Added ``--ignore-stdin``.
-    * Added support for auth plugins.
-    * Improved ``--help`` output.
-    * Improved ``Content-Disposition`` parsing for ``--download`` mode.
-    * Update to Requests 2.0.0
-* `0.6.0`_ (2013-06-03)
-    * XML data is now formatted.
-    * ``--session`` and ``--session-read-only`` now also accept paths to
-      session files (eg. ``http --session=/tmp/session.json example.org``).
-* `0.5.1`_ (2013-05-13)
-    * ``Content-*`` and ``If-*`` request headers are not stored in sessions
-      anymore as they are request-specific.
-* `0.5.0`_ (2013-04-27)
-    * Added a `download mode`_ via ``--download``.
-    * Bugfixes.
-* `0.4.1`_ (2013-02-26)
-    * Fixed ``setup.py``.
-* `0.4.0`_ (2013-02-22)
-    * Python 3.3 compatibility.
-    * Requests >= v1.0.4 compatibility.
-    * Added support for credentials in URL.
-    * Added ``--no-option`` for every ``--option`` to be config-friendly.
-    * Mutually exclusive arguments can be specified multiple times. The
-      last value is used.
-* `0.3.0`_ (2012-09-21)
-    * Allow output redirection on Windows.
-    * Added configuration file.
-    * Added persistent session support.
-    * Renamed ``--allow-redirects`` to ``--follow``.
-    * Improved the usability of ``http --help``.
-    * Fixed installation on Windows with Python 3.
-    * Fixed colorized output on Windows with Python 3.
-    * CRLF HTTP header field separation in the output.
-    * Added exit status code ``2`` for timed-out requests.
-    * Added the option to separate colorizing and formatting
-      (``--pretty=all``, ``--pretty=colors`` and ``--pretty=format``).
-      ``--ugly`` has bee removed in favor of ``--pretty=none``.
-* `0.2.7`_ (2012-08-07)
-    * Compatibility with Requests 0.13.6.
-    * Streamed terminal output. ``--stream, -S`` can be used to enable
-      streaming also with ``--pretty`` and to ensure a more frequent output
-      flushing.
-    * Support for efficient large file downloads.
-    * Sort headers by name (unless ``--pretty=none``).
-    * Response body is fetched only when needed (e.g., not with ``--headers``).
-    * Improved content type matching.
-    * Updated Solarized color scheme.
-    * Windows: Added ``--output FILE`` to store output into a file
-      (piping results in corrupted data on Windows).
-    * Proper handling of binary requests and responses.
-    * Fixed printing of ``multipart/form-data`` requests.
-    * Renamed ``--traceback`` to ``--debug``.
-* `0.2.6`_ (2012-07-26)
-    * The short option for ``--headers`` is now ``-h`` (``-t`` has been
-      removed, for usage use ``--help``).
-    * Form data and URL parameters can have multiple fields with the same name
-      (e.g.,``http -f url a=1 a=2``).
-    * Added ``--check-status`` to exit with an error on HTTP 3xx, 4xx and
-      5xx (3, 4, and 5, respectively).
-    * If the output is piped to another program or redirected to a file,
-      the default behaviour is to only print the response body.
-      (It can still be overwritten via the ``--print`` flag.)
-    * Improved highlighting of HTTP headers.
-    * Added query string parameters (``param==value``).
-    * Added support for terminal colors under Windows.
-* `0.2.5`_ (2012-07-17)
-    * Unicode characters in prettified JSON now don't get escaped for
-      improved readability.
-    * --auth now prompts for a password if only a username provided.
-    * Added support for request payloads from a file path with automatic
-      ``Content-Type`` (``http URL @/path``).
-    * Fixed missing query string when displaying the request headers via
-      ``--verbose``.
-    * Fixed Content-Type for requests with no data.
-* `0.2.2`_ (2012-06-24)
-    * The ``METHOD`` positional argument can now be omitted (defaults to
-      ``GET``, or to ``POST`` with data).
-    * Fixed --verbose --form.
-    * Added support for `Tox`_.
-* `0.2.1`_ (2012-06-13)
-    * Added compatibility with ``requests-0.12.1``.
-    * Dropped custom JSON and HTTP lexers in favor of the ones newly included
-      in ``pygments-1.5``.
-* `0.2.0`_ (2012-04-25)
-    * Added Python 3 support.
-    * Added the ability to print the HTTP request as well as the response
-      (see ``--print`` and ``--verbose``).
-    * Added support for Digest authentication.
-    * Added file upload support
-      (``http -f POST file_field_name@/path/to/file``).
-    * Improved syntax highlighting for JSON.
-    * Added support for field name escaping.
-    * Many bug fixes.
-* `0.1.6`_ (2012-03-04)
 
 
 .. _Requests: http://python-requests.org
 .. _Pygments: http://pygments.org/
 .. _pip: http://www.pip-installer.org/en/latest/index.html
 .. _Github API: http://developer.github.com/v3/issues/comments/#create-a-comment
-.. _these fine people: https://github.com/jakubroztocil/httpie/contributors
-.. _Jakub Roztocil: http://subtleapps.com
-.. _@jakubroztocil: https://twitter.com/jakubroztocil
+.. _these fine people: https://github.com/jkbrzt/httpie/contributors
+.. _Jakub Roztocil: http://roztocil.co
+.. _@jkbrzt: https://twitter.com/jkbrzt
 .. _claudiatd/httpie-artwork: https://github.com/claudiatd/httpie-artwork
-.. _0.1.6: https://github.com/jakubroztocil/httpie/compare/0.1.4...0.1.6
-.. _0.2.0: https://github.com/jakubroztocil/httpie/compare/0.1.6...0.2.0
-.. _0.2.1: https://github.com/jakubroztocil/httpie/compare/0.2.0...0.2.1
-.. _0.2.2: https://github.com/jakubroztocil/httpie/compare/0.2.1...0.2.2
-.. _0.2.5: https://github.com/jakubroztocil/httpie/compare/0.2.2...0.2.5
-.. _0.2.6: https://github.com/jakubroztocil/httpie/compare/0.2.5...0.2.6
-.. _0.2.7: https://github.com/jakubroztocil/httpie/compare/0.2.5...0.2.7
-.. _0.3.0: https://github.com/jakubroztocil/httpie/compare/0.2.7...0.3.0
-.. _0.4.0: https://github.com/jakubroztocil/httpie/compare/0.3.0...0.4.0
-.. _0.4.1: https://github.com/jakubroztocil/httpie/compare/0.4.0...0.4.1
-.. _0.5.0: https://github.com/jakubroztocil/httpie/compare/0.4.1...0.5.0
-.. _0.5.1: https://github.com/jakubroztocil/httpie/compare/0.5.0...0.5.1
-.. _0.6.0: https://github.com/jakubroztocil/httpie/compare/0.5.1...0.6.0
-.. _0.7.1: https://github.com/jakubroztocil/httpie/compare/0.6.0...0.7.1
-.. _0.8.0: https://github.com/jakubroztocil/httpie/compare/0.7.1...0.8.0
-.. _0.9.0-dev: https://github.com/jakubroztocil/httpie/compare/0.8.0...master
-.. _LICENSE: https://github.com/jakubroztocil/httpie/blob/master/LICENSE
-.. _Tox: http://tox.testrun.org
-.. _CONTRIBUTING: https://github.com/jakubroztocil/httpie/blob/master/CONTRIBUTING.rst
 
 
-.. |version| image:: https://badge.fury.io/py/httpie.svg
-    :target: http://badge.fury.io/py/httpie
+.. |pypi| image:: https://img.shields.io/pypi/v/httpie.svg?style=flat-square&label=latest%20stable%20version
+    :target: https://pypi.python.org/pypi/httpie
+    :alt: Latest version released on PyPi
 
-.. |unix| image:: https://api.travis-ci.org/jakubroztocil/httpie.svg
-    :target: http://travis-ci.org/jakubroztocil/httpie
-    :alt: Build Status of the master branch on Mac/Linux
+.. |coverage| image:: https://img.shields.io/coveralls/jkbrzt/httpie/master.svg?style=flat-square&label=coverage
+    :target: https://coveralls.io/r/jkbrzt/httpie?branch=master
+    :alt: Test coverage
 
-.. |windows|  image:: https://ci.appveyor.com/api/projects/status/f7b5dogxuseq8srw
-    :target: https://ci.appveyor.com/project/jakubroztocil/httpie
-    :alt: Build Status of the master branch on Windows
+.. |unix_build| image:: https://img.shields.io/travis/jkbrzt/httpie/master.svg?style=flat-square&label=unix%20build
+    :target: http://travis-ci.org/jkbrzt/httpie
+    :alt: Build status of the master branch on Mac/Linux
+
+.. |windows_build|  image:: https://img.shields.io/appveyor/ci/jkbrzt/httpie.svg?style=flat-square&label=windows%20build
+    :target: https://ci.appveyor.com/project/jkbrzt/httpie
+    :alt: Build status of the master branch on Windows
+
+.. |gitter| image:: https://badges.gitter.im/jkbrzt/httpie.svg
+    :target: https://gitter.im/jkbrzt/httpie
+    :alt: Chat on Gitter
+

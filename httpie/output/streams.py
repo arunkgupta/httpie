@@ -24,7 +24,7 @@ class BinarySuppressedError(Exception):
     message = BINARY_SUPPRESSED_NOTICE
 
 
-def write(stream, outfile, flush):
+def write_stream(stream, outfile, flush):
     """Write the output stream."""
     try:
         # Writing bytes so we use the buffer interface (Python 3).
@@ -38,7 +38,7 @@ def write(stream, outfile, flush):
             outfile.flush()
 
 
-def write_with_colors_win_py3(stream, outfile, flush):
+def write_stream_with_colors_win_py3(stream, outfile, flush):
     """Like `write`, but colorized chunks are written as text
     directly to `outfile` to ensure it gets processed by colorama.
     Applies only to Windows with Python 3 and colorized terminal output.
@@ -55,15 +55,15 @@ def write_with_colors_win_py3(stream, outfile, flush):
             outfile.flush()
 
 
-def build_output_stream(args, env, request, response):
+def build_output_stream(args, env, request, response, output_options):
     """Build and return a chain of iterators over the `request`-`response`
     exchange each of which yields `bytes` chunks.
 
     """
-    req_h = OUT_REQ_HEAD in args.output_options
-    req_b = OUT_REQ_BODY in args.output_options
-    resp_h = OUT_RESP_HEAD in args.output_options
-    resp_b = OUT_RESP_BODY in args.output_options
+    req_h = OUT_REQ_HEAD in output_options
+    req_b = OUT_REQ_BODY in output_options
+    resp_h = OUT_RESP_HEAD in output_options
+    resp_b = OUT_RESP_BODY in output_options
     req = req_h or req_b
     resp = resp_h or resp_b
 
@@ -112,8 +112,12 @@ def get_stream_type(env, args):
             PrettyStream if args.stream else BufferedPrettyStream,
             env=env,
             conversion=Conversion(),
-            formatting=Formatting(env=env, groups=args.prettify,
-                                  color_scheme=args.style),
+            formatting=Formatting(
+                env=env,
+                groups=args.prettify,
+                color_scheme=args.style,
+                explicit_json=args.json,
+            ),
         )
     else:
         Stream = partial(EncodedStream, env=env)

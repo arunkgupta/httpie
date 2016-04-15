@@ -4,7 +4,6 @@
 import re
 import os
 
-import requests
 from requests.cookies import RequestsCookieJar, create_cookie
 
 from httpie.compat import urlsplit
@@ -21,8 +20,9 @@ VALID_SESSION_NAME_PATTERN = re.compile('^[a-zA-Z0-9_.-]+$')
 SESSION_IGNORED_HEADER_PREFIXES = ['Content-', 'If-']
 
 
-def get_response(session_name, config_dir, args, read_only=False):
-    """Like `client.get_response`, but applies permanent
+def get_response(requests_session, session_name,
+                 config_dir, args, read_only=False):
+    """Like `client.get_responses`, but applies permanent
     aspects of the session to the request.
 
     """
@@ -30,9 +30,11 @@ def get_response(session_name, config_dir, args, read_only=False):
     if os.path.sep in session_name:
         path = os.path.expanduser(session_name)
     else:
-        hostname = (args.headers.get('Host', None)
-                    or urlsplit(args.url).netloc.split('@')[-1])
-        assert re.match('^[a-zA-Z0-9_.:-]+$', hostname)
+        hostname = (args.headers.get('Host', None) or
+                    urlsplit(args.url).netloc.split('@')[-1])
+        if not hostname:
+            # HACK/FIXME: httpie-unixsocket's URLs have no hostname.
+            hostname = 'localhost'
 
         # host:port => host_port
         hostname = hostname.replace(':', '_')
@@ -44,10 +46,10 @@ def get_response(session_name, config_dir, args, read_only=False):
     session = Session(path)
     session.load()
 
-    requests_kwargs = get_requests_kwargs(args, base_headers=session.headers)
+    kwargs = get_requests_kwargs(args, base_headers=session.headers)
     if args.debug:
-        dump_request(requests_kwargs)
-    session.update_headers(requests_kwargs['headers'])
+        dump_request(kwargs)
+    session.update_headers(kwargs['headers'])
 
     if args.auth:
         session.auth = {
@@ -56,13 +58,12 @@ def get_response(session_name, config_dir, args, read_only=False):
             'password': args.auth.value,
         }
     elif session.auth:
-        requests_kwargs['auth'] = session.auth
+        kwargs['auth'] = session.auth
 
-    requests_session = requests.Session()
     requests_session.cookies = session.cookies
 
     try:
-        response = requests_session.request(**requests_kwargs)
+        response = requests_session.request(**kwargs)
     except Exception:
         raise
     else:
@@ -74,7 +75,7 @@ def get_response(session_name, config_dir, args, read_only=False):
 
 
 class Session(BaseConfigDict):
-    helpurl = 'https://github.com/jakubroztocil/httpie#sessions'
+    helpurl = 'https://github.com/jkbrzt/httpie#sessions'
     about = 'HTTPie session file'
 
     def __init__(self, path, *args, **kwargs):
@@ -100,6 +101,10 @@ class Session(BaseConfigDict):
 
         """
         for name, value in request_headers.items():
+
+            if value is None:
+                continue  # Ignore explicitely unset headers
+
             value = value.decode('utf8')
             if name == 'User-Agent' and value.startswith('HTTPie/'):
                 continue

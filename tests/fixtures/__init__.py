@@ -12,7 +12,7 @@ def patharg(path):
     return path.replace('\\', '\\\\\\')
 
 
-FIXTURES_ROOT = path.join(path.abspath(path.dirname(__file__)), 'fixtures')
+FIXTURES_ROOT = path.join(path.abspath(path.dirname(__file__)))
 FILE_PATH = path.join(FIXTURES_ROOT, 'test.txt')
 JSON_FILE_PATH = path.join(FIXTURES_ROOT, 'test.json')
 BIN_FILE_PATH = path.join(FIXTURES_ROOT, 'test.bin')
@@ -38,4 +38,3 @@ with open(BIN_FILE_PATH, 'rb') as f:
     BIN_FILE_CONTENT = f.read()
 
 UNICODE = FILE_CONTENT
-

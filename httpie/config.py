@@ -6,11 +6,11 @@ from httpie import __version__
 from httpie.compat import is_windows
 
 
-DEFAULT_CONFIG_DIR = os.environ.get(
+DEFAULT_CONFIG_DIR = str(os.environ.get(
     'HTTPIE_CONFIG_DIR',
     os.path.expanduser('~/.httpie') if not is_windows else
     os.path.expandvars(r'%APPDATA%\\httpie')
-)
+))
 
 
 class BaseConfigDict(dict):
@@ -80,11 +80,10 @@ class BaseConfigDict(dict):
 class Config(BaseConfigDict):
 
     name = 'config'
-    helpurl = 'https://github.com/jakubroztocil/httpie#config'
+    helpurl = 'https://github.com/jkbrzt/httpie#config'
     about = 'HTTPie configuration file'
 
     DEFAULTS = {
-        'implicit_content_type': 'json',
         'default_options': []
     }
 
@@ -93,5 +92,21 @@ class Config(BaseConfigDict):
         self.update(self.DEFAULTS)
         self.directory = directory
 
+    def load(self):
+        super(Config, self).load()
+        self._migrate_implicit_content_type()
+
     def _get_path(self):
         return os.path.join(self.directory, self.name + '.json')
+
+    def _migrate_implicit_content_type(self):
+        """Migrate the removed implicit_content_type config option"""
+        try:
+            implicit_content_type = self.pop('implicit_content_type')
+        except KeyError:
+            pass
+        else:
+            if implicit_content_type == 'form':
+                self['default_options'].insert(0, '--form')
+            self.save()
+            self.load()

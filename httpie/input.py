@@ -2,24 +2,29 @@
 
 """
 import os
+import ssl
 import sys
 import re
-import json
 import errno
 import mimetypes
 import getpass
 from io import BytesIO
-from collections import namedtuple
-#noinspection PyCompatibility
+from collections import namedtuple, Iterable
+# noinspection PyCompatibility
 from argparse import ArgumentParser, ArgumentTypeError, ArgumentError
 
 # TODO: Use MultiDict for headers once added to `requests`.
-# https://github.com/jakubroztocil/httpie/issues/130
+# https://github.com/jkbrzt/httpie/issues/130
 from requests.structures import CaseInsensitiveDict
 
-from httpie.compat import OrderedDict, urlsplit, str
+from httpie.compat import OrderedDict, urlsplit, str, is_pypy, is_py27
 from httpie.sessions import VALID_SESSION_NAME_PATTERN
+from httpie.utils import load_json_preserve_order
 
+
+# ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )
+# <http://tools.ietf.org/html/rfc3986#section-3.1>
+URL_SCHEME_RE = re.compile(r'^[a-z][a-z0-9.+-]*://', re.IGNORECASE)
 
 HTTP_POST = 'POST'
 HTTP_GET = 'GET'
@@ -99,7 +104,21 @@ OUTPUT_OPTIONS_DEFAULT = OUT_RESP_HEAD + OUT_RESP_BODY
 OUTPUT_OPTIONS_DEFAULT_STDOUT_REDIRECTED = OUT_RESP_BODY
 
 
-class Parser(ArgumentParser):
+SSL_VERSION_ARG_MAPPING = {
+    'ssl2.3': 'PROTOCOL_SSLv23',
+    'ssl3': 'PROTOCOL_SSLv3',
+    'tls1': 'PROTOCOL_TLSv1',
+    'tls1.1': 'PROTOCOL_TLSv1_1',
+    'tls1.2': 'PROTOCOL_TLSv1_2',
+}
+SSL_VERSION_ARG_MAPPING = dict(
+    (cli_arg, getattr(ssl, ssl_constant))
+    for cli_arg, ssl_constant in SSL_VERSION_ARG_MAPPING.items()
+    if hasattr(ssl, ssl_constant)
+)
+
+
+class HTTPieArgumentParser(ArgumentParser):
     """Adds additional logic to `argparse.ArgumentParser`.
 
     Handles all input (CLI args, file args, stdin), applies defaults,
@@ -109,13 +128,13 @@ class Parser(ArgumentParser):
 
     def __init__(self, *args, **kwargs):
         kwargs['add_help'] = False
-        super(Parser, self).__init__(*args, **kwargs)
+        super(HTTPieArgumentParser, self).__init__(*args, **kwargs)
 
-    #noinspection PyMethodOverriding
+    # noinspection PyMethodOverriding
     def parse_args(self, env, args=None, namespace=None):
 
         self.env = env
-        self.args, no_options = super(Parser, self)\
+        self.args, no_options = super(HTTPieArgumentParser, self)\
             .parse_known_args(args, namespace)
 
         if self.args.debug:
@@ -123,7 +142,6 @@ class Parser(ArgumentParser):
 
         # Arguments processing and environment setup.
         self._apply_no_options(no_options)
-        self._apply_config()
         self._validate_download_options()
         self._setup_standard_streams()
         self._process_output_options()
@@ -132,7 +150,7 @@ class Parser(ArgumentParser):
         self._parse_items()
         if not self.args.ignore_stdin and not env.stdin_isatty:
             self._body_from_file(self.env.stdin)
-        if not (self.args.url.startswith((HTTP, HTTPS))):
+        if not URL_SCHEME_RE.match(self.args.url):
             scheme = HTTP
 
             # See if we're using curl style shorthand for localhost (:3000/foo)
@@ -160,19 +178,17 @@ class Parser(ArgumentParser):
         }.get(file, file)
         if not hasattr(file, 'buffer') and isinstance(message, str):
             message = message.encode(self.env.stdout_encoding)
-        super(Parser, self)._print_message(message, file)
+        super(HTTPieArgumentParser, self)._print_message(message, file)
 
     def _setup_standard_streams(self):
         """
         Modify `env.stdout` and `env.stdout_isatty` based on args, if needed.
 
         """
-        if not self.env.stdout_isatty and self.args.output_file:
-            self.error('Cannot use --output, -o with redirected output.')
-
+        self.args.output_file_specified = bool(self.args.output_file)
         if self.args.download:
             # FIXME: Come up with a cleaner solution.
-            if not self.env.stdout_isatty:
+            if not self.args.output_file and not self.env.stdout_isatty:
                 # Use stdout as the download output file.
                 self.args.output_file = self.env.stdout
             # With `--download`, we write everything that would normally go to
@@ -196,11 +212,6 @@ class Parser(ArgumentParser):
                     raise
             self.env.stdout = self.args.output_file
             self.env.stdout_isatty = False
-
-    def _apply_config(self):
-        if (not self.args.json
-                and self.env.config.implicit_content_type == 'form'):
-            self.args.form = True
 
     def _process_auth(self):
         """
@@ -299,8 +310,8 @@ class Parser(ArgumentParser):
                 # Infer the method
                 has_data = (
                     (not self.args.ignore_stdin and not self.env.stdin_isatty)
-                     or any(item.sep in SEP_GROUP_DATA_ITEMS
-                            for item in self.args.items)
+                    or any(item.sep in SEP_GROUP_DATA_ITEMS
+                           for item in self.args.items)
                 )
                 self.args.method = HTTP_POST if has_data else HTTP_GET
 
@@ -332,17 +343,14 @@ class Parser(ArgumentParser):
                     'Invalid file fields (perhaps you meant --form?): %s'
                     % ','.join(file_fields))
 
-            fn, fd = self.args.files['']
+            fn, fd, ct = self.args.files['']
             self.args.files = {}
 
             self._body_from_file(fd)
 
             if 'Content-Type' not in self.args.headers:
-                mime, encoding = mimetypes.guess_type(fn, strict=False)
-                if mime:
-                    content_type = mime
-                    if encoding:
-                        content_type = '%s; charset=%s' % (mime, encoding)
+                content_type = get_content_type(fn)
+                if content_type:
                     self.args.headers['Content-Type'] = content_type
 
     def _process_output_options(self):
@@ -351,18 +359,32 @@ class Parser(ArgumentParser):
         The default output options are stdout-type-sensitive.
 
         """
-        if not self.args.output_options:
-            self.args.output_options = (
-                OUTPUT_OPTIONS_DEFAULT
-                if self.env.stdout_isatty
-                else OUTPUT_OPTIONS_DEFAULT_STDOUT_REDIRECTED
-            )
+        def check_options(value, option):
+            unknown = set(value) - OUTPUT_OPTIONS
+            if unknown:
+                self.error('Unknown output options: {0}={1}'.format(
+                    option,
+                    ','.join(unknown)
+                ))
 
-        unknown_output_options = set(self.args.output_options) - OUTPUT_OPTIONS
-        if unknown_output_options:
-            self.error(
-                'Unknown output options: %s' % ','.join(unknown_output_options)
-            )
+        if self.args.verbose:
+            self.args.all = True
+
+        if self.args.output_options is None:
+            if self.args.verbose:
+                self.args.output_options = ''.join(OUTPUT_OPTIONS)
+            else:
+                self.args.output_options = (
+                    OUTPUT_OPTIONS_DEFAULT
+                    if self.env.stdout_isatty
+                    else OUTPUT_OPTIONS_DEFAULT_STDOUT_REDIRECTED
+                )
+
+        if self.args.output_options_others is None:
+            self.args.output_options_others = self.args.output_options
+
+        check_options(self.args.output_options, '--print')
+        check_options(self.args.output_options_others, '--print-others')
 
         if self.args.download and OUT_RESP_BODY in self.args.output_options:
             # Response body is always downloaded with --download and it goes
@@ -374,7 +396,8 @@ class Parser(ArgumentParser):
         if self.args.prettify == PRETTY_STDOUT_TTY_ONLY:
             self.args.prettify = PRETTY_MAP[
                 'all' if self.env.stdout_isatty else 'none']
-        elif self.args.prettify and self.env.is_windows:
+        elif (self.args.prettify and self.env.is_windows and
+              self.args.output_file):
             self.error('Only terminal output can be colorized on Windows.')
         else:
             # noinspection PyTypeChecker
@@ -517,7 +540,7 @@ class AuthCredentials(KeyValue):
 
     def _getpass(self, prompt):
         # To allow mocking.
-        return getpass.getpass(prompt)
+        return getpass.getpass(str(prompt))
 
     def has_password(self):
         return self.value is not None
@@ -557,7 +580,18 @@ class AuthCredentialsArgType(KeyValueArgType):
 class RequestItemsDict(OrderedDict):
     """Multi-value dict for URL parameters and form data."""
 
-    #noinspection PyMethodOverriding
+    if is_pypy and is_py27:
+        # Manually set keys when initialized with an iterable as PyPy
+        # doesn't call __setitem__ in such case (pypy3 does).
+        def __init__(self, *args, **kwargs):
+            if len(args) == 1 and isinstance(args[0], Iterable):
+                super(RequestItemsDict, self).__init__(**kwargs)
+                for k, v in args[0]:
+                    self[k] = v
+            else:
+                super(RequestItemsDict, self).__init__(*args, **kwargs)
+
+    # noinspection PyMethodOverriding
     def __setitem__(self, key, value):
         """ If `key` is assigned more than once, `self[key]` holds a
         `list` of all the values.
@@ -593,6 +627,21 @@ RequestItems = namedtuple('RequestItems',
                           ['headers', 'data', 'files', 'params'])
 
 
+def get_content_type(filename):
+    """
+    Return the content type for ``filename`` in format appropriate
+    for Content-Type headers, or ``None`` if the file type is unknown
+    to ``mimetypes``.
+
+    """
+    mime, encoding = mimetypes.guess_type(filename, strict=False)
+    if mime:
+        content_type = mime
+        if encoding:
+            content_type = '%s; charset=%s' % (mime, encoding)
+        return content_type
+
+
 def parse_items(items,
                 headers_class=CaseInsensitiveDict,
                 data_class=OrderedDict,
@@ -618,7 +667,8 @@ def parse_items(items,
             try:
                 with open(os.path.expanduser(value), 'rb') as f:
                     value = (os.path.basename(value),
-                             BytesIO(f.read()))
+                             BytesIO(f.read()),
+                             get_content_type(value))
             except IOError as e:
                 raise ParseError('"%s": %s' % (item.orig, e))
             target = files
@@ -640,7 +690,7 @@ def parse_items(items,
 
             if item.sep in SEP_GROUP_RAW_JSON_ITEMS:
                 try:
-                    value = json.loads(value)
+                    value = load_json_preserve_order(value)
                 except ValueError as e:
                     raise ParseError('"%s": %s' % (item.orig, e))
             target = data

@@ -1,5 +1,7 @@
 tox
+mock
 pytest
 pytest-cov
-pytest-httpbin
+pytest-httpbin>=0.0.6
 docutils
+wheel
